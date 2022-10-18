@@ -5,6 +5,7 @@ import torch
 import torch.utils.data
 from pycocotools.coco import COCO
 from pycocotools import mask as coco_mask
+from pathlib import Path
 
 from .torchvision_datasets import CocoDetection as TvCocoDetection
 from util.misc import get_local_rank, get_local_size
@@ -251,7 +252,26 @@ def make_support_transforms():
     ])
 
 
-def build(args, img_folder, ann_file, image_set, activated_class_ids, with_support):
+def build(args, image_set, activated_class_ids, with_support):
+    if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
+        root = Path('../dataset/VOC_detr')
+        assert root.exists(), f'provided Pascal path {root} does not exist'
+
+        PATHS = {
+            "train": (root / "images", root / "annotations" / 'pascal_trainval0712.json'),
+            "val": (root / "images", root / "annotations" / 'pascal_test2007.json'),
+        }
+        img_folder, ann_file = PATHS[image_set]
+        
+    if args.dataset_file in ['coco', 'coco_base']:
+        root = Path('../dataset/coco')
+        PATHS = {
+            "train": (root / "train2017", root / "annotations" / 'instances_train2017.json'),
+            "val": (root / "val2017", root / "annotations" / 'instances_val2017.json'),
+        }
+        img_folder, ann_file = PATHS[image_set]
+
+
     return DetectionDataset(args, img_folder, ann_file,
                             transforms=make_transforms(image_set),
                             support_transforms=make_support_transforms(),

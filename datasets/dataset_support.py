@@ -244,7 +244,7 @@ def build_support_dataset(image_set, args):
                                   local_size=get_local_size())
 
         if args.dataset_file == 'voc':
-            root = Path('data/voc')
+            root = Path('../dataset/VOC_detr')
             img_folder = root / "images"
             ann_files = [root / "annotations" / 'pascal_train2007.json',
                          root / "annotations" / 'pascal_val2007.json',
@@ -257,7 +257,7 @@ def build_support_dataset(image_set, args):
                                   local_rank=get_local_rank(),
                                   local_size=get_local_size())
         if args.dataset_file == 'voc_base1':
-            root = Path('data/voc')
+            root = Path('../dataset/VOC_detr')
             img_folder = root / "images"
             ann_files = [root / "annotations" / 'pascal_train2007.json',
                          root / "annotations" / 'pascal_val2007.json',
@@ -270,7 +270,7 @@ def build_support_dataset(image_set, args):
                                   local_rank=get_local_rank(),
                                   local_size=get_local_size())
         if args.dataset_file == 'voc_base2':
-            root = Path('data/voc')
+            root = Path('../dataset/VOC_detr')
             img_folder = root / "images"
             ann_files = [root / "annotations" / 'pascal_train2007.json',
                          root / "annotations" / 'pascal_val2007.json',
@@ -283,7 +283,7 @@ def build_support_dataset(image_set, args):
                                   local_rank=get_local_rank(),
                                   local_size=get_local_size())
         if args.dataset_file == 'voc_base3':
-            root = Path('data/voc')
+            root = Path('../dataset/VOC_detr')
             img_folder = root / "images"
             ann_files = [root / "annotations" / 'pascal_train2007.json',
                          root / "annotations" / 'pascal_val2007.json',

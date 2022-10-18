@@ -1,10 +1,23 @@
-from typing import Dict, List
+# ------------------------------------------------------------------------
+# Deformable DETR
+# Copyright (c) 2020 SenseTime. All Rights Reserved.
+# Licensed under the Apache License, Version 2.0 [see LICENSE for details]
+# ------------------------------------------------------------------------
+# Modified from DETR (https://github.com/facebookresearch/detr)
+# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# ------------------------------------------------------------------------
+
+"""
+Backbone modules.
+"""
+from collections import OrderedDict
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
+from typing import Dict, List
 
 from util.misc import NestedTensor, is_main_process
 
@@ -19,6 +32,7 @@ class FrozenBatchNorm2d(torch.nn.Module):
     without which any other models than torchvision.models.resnet[18,34,50,101]
     produce nans.
     """
+
     def __init__(self, n, eps=1e-5):
         super(FrozenBatchNorm2d, self).__init__()
         self.register_buffer("weight", torch.ones(n))
@@ -38,7 +52,8 @@ class FrozenBatchNorm2d(torch.nn.Module):
             missing_keys, unexpected_keys, error_msgs)
 
     def forward(self, x):
-        # move reshapes to the beginning to make it fuser-friendly
+        # move reshapes to the beginning
+        # to make it fuser-friendly
         w = self.weight.reshape(1, -1, 1, 1)
         b = self.bias.reshape(1, -1, 1, 1)
         rv = self.running_var.reshape(1, -1, 1, 1)
@@ -50,37 +65,14 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 
 class BackboneBase(nn.Module):
-    def __init__(self, backbone: nn.Module, train_backbone: bool, return_interm_layers: bool, args):
+
+    def __init__(self, backbone: nn.Module, train_backbone: bool, return_interm_layers: bool):
         super().__init__()
-        self.args = args
-        self.backbone = backbone
-
-        # Settings for freezing backbone
-        assert 0 <= args.freeze_backbone_at_layer <= 4
-        for name, parameter in backbone.named_parameters(): parameter.requires_grad_(False)  # First freeze all
-        if train_backbone:
-            if args.freeze_backbone_at_layer == 0:
-                for name, parameter in backbone.named_parameters():
-                    if 'layer1' in name or 'layer2' in name or 'layer3' in name or 'layer4' in name:
-                        parameter.requires_grad_(True)
-            elif args.freeze_backbone_at_layer == 1:
-                for name, parameter in backbone.named_parameters():
-                    if 'layer2' in name or 'layer3' in name or 'layer4' in name:
-                        parameter.requires_grad_(True)
-            elif args.freeze_backbone_at_layer == 2:
-                for name, parameter in backbone.named_parameters():
-                    if 'layer3' in name or 'layer4' in name:
-                        parameter.requires_grad_(True)
-            elif args.freeze_backbone_at_layer == 3:
-                for name, parameter in backbone.named_parameters():
-                    if 'layer4' in name:
-                        parameter.requires_grad_(True)
-            elif args.freeze_backbone_at_layer == 4:
-                pass
-            else:
-                raise RuntimeError
-
+        for name, parameter in backbone.named_parameters():
+            if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
+                parameter.requires_grad_(False)
         if return_interm_layers:
+            # return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
             return_layers = {"layer2": "0", "layer3": "1", "layer4": "2"}
             self.strides = [8, 16, 32]
             self.num_channels = [512, 1024, 2048]
@@ -89,37 +81,6 @@ class BackboneBase(nn.Module):
             self.strides = [32]
             self.num_channels = [2048]
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
-
-    def support_encoding_net(self, x, return_interm_layers=False):
-        out: Dict[str, NestedTensor] = {}
-        m = x.mask
-        # x = self.meta_conv(x.tensors)
-        x = self.backbone.conv1(x.tensors)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        if return_interm_layers:
-            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-            out['0'] = NestedTensor(x, mask)
-
-        x = self.backbone.layer3(x)
-        if return_interm_layers:
-            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-            out['1'] = NestedTensor(x, mask)
-
-        x = self.backbone.layer4(x)
-        if return_interm_layers:
-            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-            out['2'] = NestedTensor(x, mask)
-
-        if return_interm_layers:
-            return out
-        else:
-            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-            out['0'] = NestedTensor(x, mask)
-            return out
 
     def forward(self, tensor_list: NestedTensor):
         xs = self.body(tensor_list.tensors)
@@ -134,19 +95,16 @@ class BackboneBase(nn.Module):
 
 class Backbone(BackboneBase):
     """ResNet backbone with frozen BatchNorm."""
-    def __init__(self,
-                 name: str,
+    def __init__(self, name: str,
                  train_backbone: bool,
                  return_interm_layers: bool,
-                 args):
-        self.args = args
-        dilation = args.dilation
+                 dilation: bool):
         norm_layer = FrozenBatchNorm2d
         backbone = getattr(torchvision.models, name)(
             replace_stride_with_dilation=[False, False, dilation],
             pretrained=is_main_process(), norm_layer=norm_layer)
-        assert name not in ('resnet18', 'resnet34'), "number of channels are hard coded, cannot use res18 & res34."
-        super().__init__(backbone, train_backbone, return_interm_layers, args)
+        assert name not in ('resnet18', 'resnet34'), "number of channels are hard coded"
+        super().__init__(backbone, train_backbone, return_interm_layers)
         if dilation:
             self.strides[-1] = self.strides[-1] // 2
 
@@ -170,24 +128,11 @@ class Joiner(nn.Sequential):
 
         return out, pos
 
-    def forward_supp_branch(self, tensor_list: NestedTensor, return_interm_layers=False):
-        xs = self[0].support_encoding_net(tensor_list, return_interm_layers=return_interm_layers)
-        out: List[NestedTensor] = []
-        pos = []
-        for name, x in sorted(xs.items()):
-            out.append(x)
-
-        # position encoding
-        for x in out:
-            pos.append(self[1](x).to(x.tensors.dtype))
-
-        return out, pos
-
 
 def build_backbone(args):
     position_embedding = build_position_encoding(args)
     train_backbone = args.lr_backbone > 0
-    return_interm_layers = (args.num_feature_levels > 1)
-    backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args)
+    return_interm_layers = args.masks or (args.num_feature_levels > 1)
+    backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation)
     model = Joiner(backbone, position_embedding)
     return model

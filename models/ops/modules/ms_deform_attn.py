@@ -83,11 +83,12 @@ class MSDeformAttn(nn.Module):
         :param input_flatten               (N, \sum_{l=0}^{L-1} H_l \cdot W_l, C)
         :param input_spatial_shapes        (n_levels, 2), [(H_0, W_0), (H_1, W_1), ..., (H_{L-1}, W_{L-1})]
         :param input_level_start_index     (n_levels, ), [0, H_0*W_0, H_0*W_0+H_1*W_1, H_0*W_0+H_1*W_1+H_2*W_2, ..., H_0*W_0+H_1*W_1+...+H_{L-1}*W_{L-1}]
+        denote which index in the input is the first pixel of the level
         :param input_padding_mask          (N, \sum_{l=0}^{L-1} H_l \cdot W_l), True for padding elements, False for non-padding elements
 
         :return output                     (N, Length_{query}, C)
         """
-        N, Len_q, _ = query.shape
+        N, Len_q, _ = query.shape   # len_q: query number
         N, Len_in, _ = input_flatten.shape
         assert (input_spatial_shapes[:, 0] * input_spatial_shapes[:, 1]).sum() == Len_in
 

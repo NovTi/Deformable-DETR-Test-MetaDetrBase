@@ -26,9 +26,9 @@ class HungarianMatcher(nn.Module):
     """
 
     def __init__(self,
-                 cost_class: float = 1.0,
-                 cost_bbox: float = 1.0,
-                 cost_giou: float = 1.0):
+                 cost_class: float = 1,
+                 cost_bbox: float = 1,
+                 cost_giou: float = 1):
         """Creates the matcher
 
         Params:

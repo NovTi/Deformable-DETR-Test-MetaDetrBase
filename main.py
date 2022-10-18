@@ -9,15 +9,18 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import pdb
 
 import datasets
 import util.misc as utils
-from util.lr_scheduler import WarmupMultiStepLR
 import datasets.samplers as samplers
 from datasets import build_dataset, get_coco_api_from_dataset
 from datasets.dataset_support import build_support_dataset
 from engine import evaluate, train_one_epoch
 from models import build_model
+from util.lr_scheduler import WarmupMultiStepLR
+from util.load_cfg import load_cfg_from_cfg_file, merge_cfg_from_list
+
 
 torch.backends.cudnn.benchmark = False
 
@@ -59,6 +62,7 @@ def get_args_parser():
     # Model parameters
     # * Model Variant
     parser.add_argument('--with_box_refine', default=False, action='store_true')
+    parser.add_argument('--two_stage', default=False, action='store_true')
 
     # * Backbone
     parser.add_argument('--backbone', default='resnet101', type=str, help="Name of the ResNet backbone")
@@ -78,6 +82,10 @@ def get_args_parser():
     parser.add_argument('--num_queries', default=300, type=int, help="Number of query slots")
     parser.add_argument('--enc_n_points', default=4, type=int)
     parser.add_argument('--dec_n_points', default=4, type=int)
+
+    # * Segmentation
+    parser.add_argument('--masks', default=False, action='store_true',
+                        help="Train segmentation head if the flag is provided")
 
     # Loss
     parser.add_argument('--no_aux_loss', dest='aux_loss', action='store_false', help="no aux loss @ each decoder layer")
@@ -108,13 +116,31 @@ def get_args_parser():
     parser.add_argument('--num_workers', default=2, type=int)
     parser.add_argument('--cache_mode', default=False, action='store_true', help='whether to cache images on memory')
 
+    parser.add_argument('--distributed', default=False, action='store_true', help='for the args.distributed')
+
     return parser
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Training classifier weight transformer')
+    parser.add_argument('--config', type=str, required=True, help='config file')
+    parser.add_argument('--debug', type=bool, default=False, help='debug mode')
+    parser.add_argument('--opts', default=None, nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    assert args.config is not None
+    cfg = load_cfg_from_cfg_file(args.config)
+    cfg.config_path = args.config
+    cfg.debug_flag = args.debug
+    if args.opts is not None:
+        cfg = merge_cfg_from_list(cfg, args.opts)
+    return cfg
 
 
 def main(args):
-    utils.init_distributed_mode(args)
+    # utils.init_distributed_mode(args)
     print(args)
 
+    pdb.set_trace()
+    
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
@@ -182,7 +208,7 @@ def main(args):
 
     for n, p in model_without_ddp.named_parameters():
         print(n)
-
+    # pdb.set_trace()
     if not args.fewshot_finetune:
         param_dicts = [
             {
@@ -359,8 +385,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Meta-DETR', parents=[get_args_parser()])
-    args = parser.parse_args()
+    args = parse_args()
     assert args.max_pos_support <= args.total_num_support
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

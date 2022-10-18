@@ -13,7 +13,6 @@ Various positional encodings for the transformer.
 import math
 import torch
 from torch import nn
-from torch.autograd import Variable
 
 from util.misc import NestedTensor
 
@@ -85,44 +84,10 @@ class PositionEmbeddingLearned(nn.Module):
         return pos
 
 
-class TaskPositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.05, max_len=10):
-        super(TaskPositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        # Compute the task positional encodings once and for all in log space.
-        tpe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) *
-                             -(math.log(10000.0) / d_model))
-        tpe[:, 0::2] = torch.sin(position * div_term)
-        tpe[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('tpe', tpe)
-
-    def forward(self, x):
-        x = x + torch.flip(Variable(self.tpe[:x.size(1)], requires_grad=False), [1])
-        return self.dropout(x)
-
-
-class QueryEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.0, max_len=100):
-        super(QueryEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        # Compute the query encodings once and for all in log space.
-        queryencoding = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
-        queryencoding[:, 0::2] = torch.sin(position * div_term)
-        queryencoding[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('queryencoding', queryencoding)
-
-    def forward(self):
-        x = Variable(self.queryencoding, requires_grad=False)
-        return self.dropout(x)
-
-
 def build_position_encoding(args):
     N_steps = args.hidden_dim // 2
     if args.position_embedding in ('v2', 'sine'):
+        # TODO find a better way of exposing other arguments
         position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
     elif args.position_embedding in ('v3', 'learned'):
         position_embedding = PositionEmbeddingLearned(N_steps)

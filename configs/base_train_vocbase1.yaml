@@ -1,0 +1,87 @@
+BASETRAIN:     # Basic Training and Inference Setting
+  lr: 0.0002
+  lr_backbone: 2e-05
+  lr_backbone_names: ['backbone.0']
+  lr_drop_milestones: [20]
+  lr_linear_proj_mult: 0.1
+  lr_linear_proj_names: ['reference_points', 'sampling_offsets']
+  batch_size: 4
+  embedding_related_names: ['level_embed', 'query_embed']
+  weight_decay: 0.0001
+  epochs: 25
+  warmup_epochs: 0
+  warmup_factor: 0.1
+  clip_max_norm: 0.1
+  resume: ''
+  start_epoch: 0
+  eval: False
+  eval_every_epoch: 5
+  save_every_epoch: 5
+
+FEWSHOTFINETUNE:   # Few-shot Learning Setting
+  fewshot_finetune: False
+  fewshot_seed: 1
+  num_shots: 10
+
+META:           # Meta-Task Construction Settings
+  episode_num: 5
+  episode_size: 5
+  max_pos_support: 10
+  total_num_support: 15
+
+# Model parameters
+MODELVARIANT:    # * Model Variant
+  with_box_refine: False
+  two_stage: False
+
+BACKBONE:       # * Backbone
+  backbone: 'resnet101'
+  dilation: False
+  freeze_backbone_at_layer: 2
+  num_feature_levels: 1
+  position_embedding: 'sine'
+  position_embedding_scale: 6.283185307179586
+
+TRANSFORMER:    # * Transformer
+  enc_layers: 6
+  dec_layers: 6
+  dim_feedforward: 1024
+  hidden_dim: 256
+  dropout: 0.1
+  nheads: 8
+  num_queries: 300
+  dec_n_points: 4
+  enc_n_points: 4
+
+SEGMENTATION:    # * Segmentation
+  masks: False
+
+LOSS:        # Loss
+  aux_loss: True
+  category_codes_cls_loss: True 
+
+MATCHER:      # * Matcher
+  set_cost_bbox: 5.0
+  set_cost_class: 2.0
+  set_cost_giou: 2.0
+
+LOSSCOEF:        # * Loss coefficients
+  mask_loss_coef: 1.0
+  bbox_loss_coef: 5.0
+  giou_loss_coef: 2.0
+  dice_loss_coef: 1.0
+  cls_loss_coef: 2.0
+  category_codes_cls_loss_coef: 5.0
+  focal_alpha: 0.25
+
+DATASET:         # dataset parameters
+  dataset_file: 'voc_base1'
+  remove_difficult: False
+
+MISC:             # Misc
+  output_dir: 'exps/voc_1/base_train'
+  device: 'cuda'
+  cache_mode: False
+  distributed: False
+  num_workers: 2
+  seed: 6666

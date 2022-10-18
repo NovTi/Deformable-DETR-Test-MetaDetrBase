@@ -1,0 +1,15 @@
+Namespace(aux_loss=True, backbone='resnet101', batch_size=4, bbox_loss_coef=5.0, cache_mode=False, category_codes_cls_loss=True, category_codes_cls_loss_coef=5.0, clip_max_norm=0.1, cls_loss_coef=2.0, dataset_file='voc_base1', dec_layers=6, dec_n_points=4, device='cuda', dice_loss_coef=1.0, dilation=False, dim_feedforward=1024, distributed=False, dropout=0.1, embedding_related_names=['level_embed', 'query_embed'], enc_layers=6, enc_n_points=4, episode_num=5, episode_size=5, epochs=50, eval=False, eval_every_epoch=10, fewshot_finetune=False, fewshot_seed=1, focal_alpha=0.25, freeze_backbone_at_layer=2, giou_loss_coef=2.0, hidden_dim=256, lr=0.0002, lr_backbone=2e-05, lr_backbone_names=['backbone.0'], lr_drop_milestones=[45], lr_linear_proj_mult=0.1, lr_linear_proj_names=['reference_points', 'sampling_offsets'], mask_loss_coef=1.0, max_pos_support=10, nheads=8, num_feature_levels=1, num_queries=300, num_shots=10, num_workers=2, output_dir='exps/voc1/base_train', position_embedding='sine', position_embedding_scale=6.283185307179586, remove_difficult=False, resume='', save_every_epoch=10, seed=6666, set_cost_bbox=5.0, set_cost_class=2.0, set_cost_giou=2.0, start_epoch=0, total_num_support=15, warmup_epochs=0, warmup_factor=0.1, weight_decay=0.0001, with_box_refine=False)
+[1] > [33;01m/scratch/yx2432/Meta-DETR/main.py[00m([36;01m121[00m)main()
+-> device = torch.device(args.device)
+(Pdb++) Traceback (most recent call last):
+  File "main.py", line 370, in <module>
+    main(args)
+  File "main.py", line 121, in main
+    device = torch.device(args.device)
+  File "main.py", line 121, in main
+    device = torch.device(args.device)
+  File "/ext3/miniconda3/lib/python3.7/bdb.py", line 88, in trace_dispatch
+    return self.dispatch_line(frame)
+  File "/ext3/miniconda3/lib/python3.7/bdb.py", line 113, in dispatch_line
+    if self.quitting: raise BdbQuit
+bdb.BdbQuit
