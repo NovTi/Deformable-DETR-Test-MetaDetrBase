@@ -253,10 +253,9 @@ def make_support_transforms():
 
 
 def build(args, image_set, activated_class_ids, with_support):
+    root = Path(args.data_root)
     if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
-        root = Path('../dataset/VOC_detr')
         assert root.exists(), f'provided Pascal path {root} does not exist'
-
         PATHS = {
             "train": (root / "images", root / "annotations" / 'pascal_trainval0712.json'),
             "val": (root / "images", root / "annotations" / 'pascal_test2007.json'),
@@ -264,7 +263,7 @@ def build(args, image_set, activated_class_ids, with_support):
         img_folder, ann_file = PATHS[image_set]
         
     if args.dataset_file in ['coco', 'coco_base']:
-        root = Path('../dataset/coco')
+        assert root.exists(), f'provided COCO path {root} does not exist'
         PATHS = {
             "train": (root / "train2017", root / "annotations" / 'instances_train2017.json'),
             "val": (root / "val2017", root / "annotations" / 'instances_val2017.json'),

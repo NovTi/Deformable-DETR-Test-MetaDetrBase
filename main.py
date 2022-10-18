@@ -108,6 +108,8 @@ def get_args_parser():
     # dataset parameters
     parser.add_argument('--dataset_file', default='voc_base1')
     parser.add_argument('--remove_difficult', action='store_true')
+    parser.add_argument('--data_root', default='../dataset/VOC_detr')
+
 
     # Misc
     parser.add_argument('--output_dir', default='', help='path to where to save, empty for no saving')
@@ -139,7 +141,7 @@ def main(args):
     # utils.init_distributed_mode(args)
     print(args)
 
-    pdb.set_trace()
+    # pdb.set_trace()
     
     device = torch.device(args.device)
 
@@ -385,7 +387,9 @@ def main(args):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    parser = argparse.ArgumentParser('Meta-DETR', parents=[get_args_parser()])
+    args = parser.parse_args()
+    # args = parse_args()
     assert args.max_pos_support <= args.total_num_support
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
