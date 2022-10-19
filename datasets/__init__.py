@@ -4,7 +4,7 @@ import torch.utils.data
 from .torchvision_datasets import CocoDetection
 
 from .dataset import build
-from .dataset_fewshot import build as build_fewshot
+# from .dataset_fewshot import build as build_fewshot
 
 
 # Meta-settings for few-shot object detection: base / novel category split
@@ -114,7 +114,7 @@ def get_coco_api_from_dataset(dataset):
 
 
 def build_dataset(image_set, args):
-    assert image_set in ['train', 'val', 'fewshot'], "image_set must be 'train', 'val' or 'fewshot'."
+    assert image_set in ['train', 'val', 'finetune'], "image_set must be 'train', 'val' or 'finetune'."
     # For training set, need to perform base/novel category filtering.
     # For training set, we use dataset with support to construct meta-tasks
     if image_set == 'train':
@@ -125,13 +125,13 @@ def build_dataset(image_set, args):
         if args.dataset_file == 'coco_base':
             return build(args, img_folder, ann_file, image_set, activated_class_ids=coco_base_class_ids, with_support=True)
         if args.dataset_file == 'voc':
-            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), with_support=True)
+            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), is_finetune=False)
         if args.dataset_file == 'voc_base1':
-            return build(args, image_set, activated_class_ids=voc_base1_class_ids, with_support=False)
+            return build(args, image_set, activated_class_ids=voc_base1_class_ids, is_finetune=False)
         if args.dataset_file == 'voc_base2':
-            return build(args, image_set, activated_class_ids=voc_base2_class_ids, with_support=False)
+            return build(args, image_set, activated_class_ids=voc_base2_class_ids, is_finetune=False)
         if args.dataset_file == 'voc_base3':
-            return build(args, image_set, activated_class_ids=voc_base3_class_ids, with_support=False)
+            return build(args, image_set, activated_class_ids=voc_base3_class_ids, is_finetune=False)
 
     # For valid set, no need to perform base/novel category filtering.
     # This is because that evaluation should be performed on all images.
@@ -140,16 +140,25 @@ def build_dataset(image_set, args):
         if args.dataset_file in ['coco', 'coco_base']:
             class_ids = coco_base_class_ids + coco_novel_class_ids
             class_ids.sort()
-            return build(args, image_set, activated_class_ids=class_ids, with_support=False)
+            return build(args, image_set, activated_class_ids=class_ids, is_finetune=False)
         if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
-            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), with_support=False)
+            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), is_finetune=False)
 
-    if image_set == 'fewshot':
+    if image_set == 'finetune':
         if args.dataset_file in ['coco', 'coco_base']:
             class_ids = coco_base_class_ids + coco_novel_class_ids
             class_ids.sort()
-            return build_fewshot(args, image_set, activated_class_ids=class_ids, with_support=True)
-        if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
-            return build_fewshot(args, image_set, activated_class_ids=list(range(1, 20+1)), with_support=True)
+            return build_fewshot(args, image_set, activated_class_ids=class_ids, is_finetune=True)
+        if args.dataset_file == 'voc':
+            raise ValueError('voc is not for fine tune.')
+        if args.dataset_file == 'voc_base1':
+            return build(args, image_set, activated_class_ids=voc_novel1_class_ids, is_finetune=True)
+        if args.dataset_file == 'voc_base2':
+            return build(args, image_set, activated_class_ids=voc_novel2_class_ids, is_finetune=True)
+        if args.dataset_file == 'voc_base3':
+            return build(args, image_set, activated_class_ids=voc_novel3_class_ids, is_finetune=True)
+
+        # if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
+        #     return build_fewshot(args, image_set, activated_class_ids=list(range(1, 20+1)), is_finetune=True)
 
     raise ValueError(f'{image_set} of dataset {args.dataset_file}  not supported.')

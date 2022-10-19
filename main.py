@@ -49,7 +49,7 @@ def get_args_parser():
     parser.add_argument('--save_every_epoch', default=10, type=int, help='save model weights every ? epoch')
 
     # Few-shot Learning Setting
-    parser.add_argument('--fewshot_finetune', default=False, action='store_true')
+    parser.add_argument('--is_finetune', default=False, action='store_true')
     parser.add_argument('--fewshot_seed', default=1, type=int)
     parser.add_argument('--num_shots', default=10, type=int)
 
@@ -123,7 +123,7 @@ def get_args_parser():
     return parser
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Training classifier weight transformer')
+    parser = argparse.ArgumentParser(description='Testing Deformable DETR Idea')
     parser.add_argument('--config', type=str, required=True, help='config file')
     parser.add_argument('--debug', type=bool, default=False, help='debug mode')
     parser.add_argument('--opts', default=None, nargs=argparse.REMAINDER)
@@ -158,24 +158,26 @@ def main(args):
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
-    image_set = 'fewshot' if args.fewshot_finetune else 'train'
+    image_set = 'finetune' if args.is_finetune else 'train'
     dataset_train = build_dataset(image_set=image_set, args=args)
     dataset_val = build_dataset(image_set='val', args=args)
-    dataset_support = build_support_dataset(image_set=image_set, args=args)
+    # dataset_support = build_support_dataset(image_set=image_set, args=args)
+
+    a = dataset_train[0]
 
     if args.distributed:
         if args.cache_mode:
             sampler_train = samplers.NodeDistributedSampler(dataset_train)
             sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
-            sampler_support = samplers.NodeDistributedSampler(dataset_support)
+            # sampler_support = samplers.NodeDistributedSampler(dataset_support)
         else:
             sampler_train = samplers.DistributedSampler(dataset_train)
             sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
-            sampler_support = samplers.DistributedSampler(dataset_support)
+            # sampler_support = samplers.DistributedSampler(dataset_support)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-        sampler_support = torch.utils.data.RandomSampler(dataset_support)
+        # sampler_support = torch.utils.data.RandomSampler(dataset_support)
 
     batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=False)
 
@@ -193,12 +195,12 @@ def main(args):
                             num_workers=args.num_workers,
                             pin_memory=True)
 
-    loader_support = DataLoader(dataset_support,
-                                batch_size=1,
-                                sampler=sampler_support,
-                                drop_last=False,
-                                num_workers=args.num_workers,
-                                pin_memory=False)
+    # loader_support = DataLoader(dataset_support,
+                                # batch_size=1,
+                                # sampler=sampler_support,
+                                # drop_last=False,
+                                # num_workers=args.num_workers,
+                                # pin_memory=False)
 
     def match_name_keywords(n, name_keywords):
         out = False
@@ -387,9 +389,9 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Meta-DETR', parents=[get_args_parser()])
-    args = parser.parse_args()
-    # args = parse_args()
+    # parser = argparse.ArgumentParser('Meta-DETR', parents=[get_args_parser()])
+    # args = parser.parse_args()
+    args = parse_args()
     assert args.max_pos_support <= args.total_num_support
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,8 @@ import torch.utils.data
 from pycocotools.coco import COCO
 from pycocotools import mask as coco_mask
 from pathlib import Path
+import pdb
+import json
 
 from .torchvision_datasets import CocoDetection as TvCocoDetection
 from util.misc import get_local_rank, get_local_size
@@ -14,42 +16,60 @@ import datasets.transforms as T
 
 class DetectionDataset(TvCocoDetection):
     def __init__(self, args, img_folder, ann_file, transforms, support_transforms, return_masks, activated_class_ids,
-                 with_support, cache_mode=False, local_rank=0, local_size=1):
+                is_finetune, cache_mode=False, local_rank=0, local_size=1):
         super(DetectionDataset, self).__init__(img_folder, ann_file, cache_mode=cache_mode, local_rank=local_rank, local_size=local_size)
-        self.with_support = with_support
+        self.is_finetune = is_finetune
         self.activated_class_ids = activated_class_ids
         self._transforms = transforms
         self.prepare = ConvertCocoPolysToMask(return_masks)
+        self.shot = args.shot
         """
-        If with_support = True, this dataset will also produce support images and support targets.
-        with_support should be set to True for training, and should be set to False for inference.
+        If is_finetune = True, this dataset will also produce support images and support targets.
+        is_finetune should be set to True for training, and should be set to False for inference.
           * During training, support images are sampled along with query images in this dataset.
           * During inference, support images are sampled from dataset_support.py
         """
-        if self.with_support:
-            self.NUM_SUPP = args.total_num_support
-            self.NUM_MAX_POS_SUPP = args.max_pos_support
-            self.support_transforms = support_transforms
-            self.build_support_dataset(ann_file)
+        if self.is_finetune:
+            self.data_info = json.load(open(f'./data/fullshot_split{args.dataset_file[-1]}.json'))
+        # if self.is_finetune:
+        #     self.NUM_SUPP = args.total_num_support
+        #     self.NUM_MAX_POS_SUPP = args.max_pos_support
+        #     self.support_transforms = support_transforms
+        #     self.build_support_dataset(ann_file)
+
+        # self.finetune_images, self.finetune_ann = self.build_finetune_dataset(ann_file, finetune_class_ids, args.dataset_file[-1])
 
     def __getitem__(self, idx):
-        img, target = super(DetectionDataset, self).__getitem__(idx)
-        target = [anno for anno in target if anno['category_id'] in self.activated_class_ids]
-        image_id = self.ids[idx]
-        target = {'image_id': image_id, 'annotations': target}
-        img, target = self.prepare(img, target)
-        if self._transforms is not None:
-            img, target = self._transforms(img, target)
-        if self.with_support:
-            support_images, support_class_ids, support_targets = self.sample_support_samples(target)
+        if self.is_finetune:
+            # deal with query image
+            img = self.data_info["all_imgs"][idx]
+            img_category = str(img['category_id'])
+            img_id = img['id']         # int
+            target = self.data_info["annotations"][img_category][idx]
+            target = {'image_id': img_id, 'annotations': [target]}
+            img_path = os.path.join('../dataset/VOC_detr/images', img['file_name'])
+            img = Image.open(img_path).convert('RGB')
+            img, target = self.prepare(img, target)
+
+            # deal with support images
+            support_images, support_class_ids, support_targets = self.get_supports(img_id, img_category, self.shot)
             return img, target, support_images, support_class_ids, support_targets
         else:
+            img, target = super(DetectionDataset, self).__getitem__(idx)
+            target = [anno for anno in target if anno['category_id'] in self.activated_class_ids]
+            image_id = self.ids[idx]['image_id']
+            target = {'image_id': image_id, 'annotations': target}
+            img, target = self.prepare(img, target)
+            if self._transforms is not None:
+                img, target = self._transforms(img, target)
             return img, target
 
-    def build_support_dataset(self, ann_file):
-        self.anns_by_class = {i: [] for i in self.activated_class_ids}
+    # create finetune data info json file only
+    def build_finetune_dataset(self, ann_file, finetune_class_ids, split):
+        finetune_ann = {i: [] for i in finetune_class_ids}
+        finetune_images = {i: [] for i in finetune_class_ids}
         coco = COCO(ann_file)
-        for classid in self.activated_class_ids:
+        for classid in finetune_class_ids:
             annIds = coco.getAnnIds(catIds=classid)
             for annId in annIds:
                 ann = coco.loadAnns(annId)[0]
@@ -62,9 +82,46 @@ class DetectionDataset(TvCocoDetection):
                 if 'iscrowd' in ann:
                     if ann['iscrowd'] == 1:
                         continue
-                ann['image_path'] = coco.loadImgs(ann['image_id'])[0]['file_name']
-                self.anns_by_class[classid].append(ann)
+                # ann['image_path'] = coco.loadImgs(ann['image_id'])[0]['file_name']
+                finetune_images[classid].append(coco.loadImgs(ann['image_id'])[0])
+                finetune_ann[classid].append(ann)
+        data_path = '../dataset/VOC_detr/annotations/pascal_trainval0712.json'
+        data = json.load(open(data_path))
+        load_dict = {"images": finetune_images, "annotations": finetune_ann, "categories": data["categories"]}
+        with open(f'./data/voc_fewshot_split{split}/fullshot.json', 'w') as f:
+            json.dump(load_dict, f)
+        return finetune_images, finetune_ann
 
+    def get_supports(self, img_id, img_category, shot):
+        choose = 0
+        sampled_support_idx = []
+        while choose != shot:   
+            sampled_idx = random.randint(0, len(self.data_info['images'][img_category])-1)
+            if self.data_info['images'][img_category][sampled_idx]['id'] != img_id:
+                choose += 1
+                sampled_support_idx.append(sampled_idx)
+
+        support_images = []
+        support_targets = []
+        support_class_ids = [int(img_category)]
+
+        for image_idx in sampled_support_idx:
+            support_target = self.data_info['annotations'][img_category][image_idx]
+            support_target = {'image_id': int(img_category), 'annotations': [support_target]}  # Actually it is class_id for key 'image_id' here
+            support_image_path = os.path.join('../dataset/VOC_detr/images', self.data_info["images"][img_category][image_idx]['file_name'])
+            support_image = Image.open(support_image_path).convert('RGB')
+            support_image, support_target = self.prepare(support_image, support_target)
+            if self._transforms is not None:
+                org_support_target, org_support_image = support_target, support_image
+                while True:
+                    support_image, support_target = self._transforms(org_support_image, org_support_target)
+                    # Make sure the object is not deleted after transforms, and it is not too small (mostly cut off)
+                    if support_target['boxes'].shape[0] == 1 and support_target['area'] >= org_support_target['area'] / 5.0:
+                        break
+            support_images.append(support_image)
+            support_targets.append(support_target)
+        return support_images, torch.as_tensor(support_class_ids), support_targets
+        
     def sample_support_samples(self, target):
         positive_labels = target['labels'].unique()
         num_positive_labels = positive_labels.shape[0]
@@ -201,7 +258,7 @@ def make_transforms(image_set):
 
     scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
 
-    if image_set == 'train':
+    if image_set == 'train' or "finetune":
         return T.Compose([
             T.RandomHorizontalFlip(),
             T.RandomColorJitter(p=0.3333),
@@ -252,12 +309,13 @@ def make_support_transforms():
     ])
 
 
-def build(args, image_set, activated_class_ids, with_support):
+def build(args, image_set, activated_class_ids, is_finetune):
     root = Path(args.data_root)
     if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
         assert root.exists(), f'provided Pascal path {root} does not exist'
         PATHS = {
             "train": (root / "images", root / "annotations" / 'pascal_trainval0712.json'),
+            "finetune": (root / "images", root / "annotations" / 'pascal_trainval0712.json'),
             "val": (root / "images", root / "annotations" / 'pascal_test2007.json'),
         }
         img_folder, ann_file = PATHS[image_set]
@@ -266,6 +324,7 @@ def build(args, image_set, activated_class_ids, with_support):
         assert root.exists(), f'provided COCO path {root} does not exist'
         PATHS = {
             "train": (root / "train2017", root / "annotations" / 'instances_train2017.json'),
+            "finetune": (root / "images", root / "annotations" / 'pascal_trainval0712.json'),
             "val": (root / "val2017", root / "annotations" / 'instances_val2017.json'),
         }
         img_folder, ann_file = PATHS[image_set]
@@ -276,7 +335,7 @@ def build(args, image_set, activated_class_ids, with_support):
                             support_transforms=make_support_transforms(),
                             return_masks=False,
                             activated_class_ids=activated_class_ids,
-                            with_support=with_support,
+                            is_finetune=is_finetune,
                             cache_mode=args.cache_mode,
                             local_rank=get_local_rank(),
                             local_size=get_local_size())

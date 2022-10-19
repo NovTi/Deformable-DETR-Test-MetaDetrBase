@@ -18,8 +18,9 @@ BASETRAIN:     # Basic Training and Inference Setting
   eval_every_epoch: 5
   save_every_epoch: 5
 
-FEWSHOTFINETUNE:   # Few-shot Learning Setting
-  fewshot_finetune: False
+FINETUNE:   # Few-shot Learning Setting
+  is_finetune: True
+  fewshot_finetune: True
   fewshot_seed: 1
   num_shots: 10
 
@@ -28,6 +29,7 @@ META:           # Meta-Task Construction Settings
   episode_size: 5
   max_pos_support: 10
   total_num_support: 15
+  shot: 1
 
 # Model parameters
 MODELVARIANT:    # * Model Variant
