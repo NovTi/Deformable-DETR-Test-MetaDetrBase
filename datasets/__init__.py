@@ -121,17 +121,17 @@ def build_dataset(image_set, args):
         if args.dataset_file == 'coco':
             class_ids = coco_base_class_ids + coco_novel_class_ids
             class_ids.sort()
-            return build(args, img_folder, ann_file, image_set, activated_class_ids=class_ids, with_support=True)
+            return build(args, img_folder, ann_file, image_set, activated_class_ids=class_ids, is_val=True)
         if args.dataset_file == 'coco_base':
-            return build(args, img_folder, ann_file, image_set, activated_class_ids=coco_base_class_ids, with_support=True)
+            return build(args, img_folder, ann_file, image_set, activated_class_ids=coco_base_class_ids, is_val=True)
         if args.dataset_file == 'voc':
-            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), is_finetune=False)
+            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), is_val=False)
         if args.dataset_file == 'voc_base1':
-            return build(args, image_set, activated_class_ids=voc_base1_class_ids, is_finetune=False)
+            return build(args, image_set, activated_class_ids=voc_base1_class_ids, is_val=False)
         if args.dataset_file == 'voc_base2':
-            return build(args, image_set, activated_class_ids=voc_base2_class_ids, is_finetune=False)
+            return build(args, image_set, activated_class_ids=voc_base2_class_ids, is_val=False)
         if args.dataset_file == 'voc_base3':
-            return build(args, image_set, activated_class_ids=voc_base3_class_ids, is_finetune=False)
+            return build(args, image_set, activated_class_ids=voc_base3_class_ids, is_val=False)
 
     # For valid set, no need to perform base/novel category filtering.
     # This is because that evaluation should be performed on all images.
@@ -140,23 +140,24 @@ def build_dataset(image_set, args):
         if args.dataset_file in ['coco', 'coco_base']:
             class_ids = coco_base_class_ids + coco_novel_class_ids
             class_ids.sort()
-            return build(args, image_set, activated_class_ids=class_ids, is_finetune=False)
+            return build(args, image_set, activated_class_ids=class_ids, is_val=True)
         if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
-            return build(args, image_set, activated_class_ids=list(range(1, 20+1)), is_finetune=False)
+            return build(args, image_set, activated_class_ids=list(range(1, 20+1)),
+                        is_val=True, old_ann_file=True)
 
     if image_set == 'finetune':
         if args.dataset_file in ['coco', 'coco_base']:
             class_ids = coco_base_class_ids + coco_novel_class_ids
             class_ids.sort()
-            return build_fewshot(args, image_set, activated_class_ids=class_ids, is_finetune=True)
+            return build_fewshot(args, image_set, activated_class_ids=class_ids, is_val=False)
         if args.dataset_file == 'voc':
             raise ValueError('voc is not for fine tune.')
         if args.dataset_file == 'voc_base1':
-            return build(args, image_set, activated_class_ids=voc_novel1_class_ids, is_finetune=True)
+            return build(args, image_set, activated_class_ids=voc_novel1_class_ids, is_val=False)
         if args.dataset_file == 'voc_base2':
-            return build(args, image_set, activated_class_ids=voc_novel2_class_ids, is_finetune=True)
+            return build(args, image_set, activated_class_ids=voc_novel2_class_ids, is_val=False)
         if args.dataset_file == 'voc_base3':
-            return build(args, image_set, activated_class_ids=voc_novel3_class_ids, is_finetune=True)
+            return build(args, image_set, activated_class_ids=voc_novel3_class_ids, is_val=False)
 
         # if args.dataset_file in ['voc', 'voc_base1', 'voc_base2', 'voc_base3']:
         #     return build_fewshot(args, image_set, activated_class_ids=list(range(1, 20+1)), is_finetune=True)

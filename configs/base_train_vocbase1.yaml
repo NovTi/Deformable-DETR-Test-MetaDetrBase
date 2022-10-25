@@ -19,8 +19,7 @@ BASETRAIN:     # Basic Training and Inference Setting
   save_every_epoch: 5
 
 FINETUNE:   # Few-shot Learning Setting
-  is_finetune: True
-  fewshot_finetune: True
+  is_finetune: False
   fewshot_seed: 1
   num_shots: 10
 

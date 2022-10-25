@@ -91,75 +91,9 @@ def train_one_epoch(args,
     metric_logger.add_meter('grad_norm', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 50   # print frequency
-
-    if args.fewshot_finetune:
-        for samples, targets, support_images, support_class_ids, support_targets in metric_logger.log_every(dataloader, print_freq, header):
-            # * Sample Support Categories;
-            # * Filters Targets (only keep GTs within support categories);
-            # * Samples Support Images and Targets
-            targets, support_images, support_class_ids, support_targets = \
-                sample_support_categories(args, targets, support_images, support_class_ids, support_targets)
-
-            samples = samples.to(device)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-            support_images = support_images.to(device)
-            support_class_ids = support_class_ids.to(device)
-            support_targets = [{k: v.to(device) for k, v in t.items()} for t in support_targets]
-
-            # pdb.set_trace()
-
-            outputs = model(samples)  # , targets=targets, supp_samples=support_images, supp_class_ids=support_class_ids, supp_targets=support_targets
-            loss_dict = criterion(outputs, targets)
-            weight_dict = criterion.weight_dict
-            losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-
-            # reduce losses over all GPUs for logging purposes
-            loss_dict_reduced = utils.reduce_dict(loss_dict)
-            loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
-            loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
-            losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
-
-            loss_value = losses_reduced_scaled.item()
-
-            if not math.isfinite(loss_value):
-                print("Loss is NaN - {}. \nTraining terminated unexpectedly.\n".format(loss_value))
-                print("loss dict:")
-                print(loss_dict_reduced)
-                sys.exit(1)
-
-            optimizer.zero_grad()
-            losses.backward()
-            if max_norm > 0:
-                grad_total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            else:
-                grad_total_norm = utils.get_total_grad_norm(model.parameters(), max_norm)
-            optimizer.step()
-
-            metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
-            metric_logger.update(class_error=loss_dict_reduced['class_error'])
-            metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-            metric_logger.update(grad_norm=grad_total_norm)
-
-        # gather the stats from all processes
-        metric_logger.synchronize_between_processes()
-        print("Averaged stats:", metric_logger)
-
-        del support_images
-        del support_class_ids
-        del support_targets
-        del samples
-        del targets
-        del outputs
-        del weight_dict
-        del grad_total_norm
-        del loss_value
-        del losses
-        del loss_dict
-        del loss_dict_reduced
-        del loss_dict_reduced_scaled
-        del loss_dict_reduced_unscaled
-
-        return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    # pdb.set_trace()
+    if args.is_finetune:
+        pass
 
     else:  # base train
         for samples, targets in metric_logger.log_every(dataloader, print_freq, header):
@@ -201,136 +135,46 @@ def train_one_epoch(args,
         # gather the stats from all processes
         metric_logger.synchronize_between_processes()
         print("Averaged stats:", metric_logger)
-
-        del support_images
-        del support_class_ids
-        del support_targets
-        del samples
-        del targets
-        del outputs
-        del weight_dict
-        del grad_total_norm
-        del loss_value
-        del losses
-        del loss_dict
-        del loss_dict_reduced
-        del loss_dict_reduced_scaled
-        del loss_dict_reduced_unscaled
-
         return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
         
 
 
 
 @torch.no_grad()
-def evaluate(args, model, criterion, postprocessors, dataloader, support_data_loader, base_ds, device, type='all'):
+def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, output_dir):
     model.eval()
     criterion.eval()
-
-    # First: Obtain Category Codes for All Categories to Detect
-    support_iter = iter(support_data_loader)
-    all_category_codes_final = []
-    print("Extracting support category codes...")
-    number_of_supports = 100  # This is the number of support images to use for each category. Need be large enough.
-    for i in range(number_of_supports):
-        try:
-            support_images, support_class_ids, support_targets = next(support_iter)
-        except:
-            support_iter = iter(support_data_loader)
-            support_images, support_class_ids, support_targets = next(support_iter)
-        support_images = [support_image.squeeze(0) for support_image in support_images]
-        support_class_ids = support_class_ids.squeeze(0).to(device)
-        support_targets = [{k: v.squeeze(0) for k, v in t.items()} for t in support_targets]
-        num_classes = support_class_ids.shape[0]
-        num_episode = math.ceil(num_classes / args.episode_size)
-        category_codes_final = []
-        support_class_ids_final = []
-        for i in range(num_episode):
-            if (args.episode_size * (i + 1)) <= num_classes:
-                support_images_ = utils.nested_tensor_from_tensor_list(
-                    support_images[(args.episode_size * i): (args.episode_size * (i + 1))]
-                ).to(device)
-                support_targets_ = [
-                    {k: v.to(device) for k, v in t.items()} for t in support_targets[(args.episode_size * i): (args.episode_size * (i + 1))]
-                ]
-                support_class_ids_ = support_class_ids[(args.episode_size * i): (args.episode_size* (i + 1))]
-            else:
-                support_images_ = utils.nested_tensor_from_tensor_list(
-                    support_images[-args.episode_size:]
-                ).to(device)
-                support_targets_ = [
-                    {k: v.to(device) for k, v in t.items()} for t in support_targets[-args.episode_size:]
-                ]
-                support_class_ids_ = support_class_ids[-args.episode_size:]
-            if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-                category_code = model.module.compute_category_codes(support_images_, support_targets_)
-            else:
-                category_code = model.compute_category_codes(support_images_, support_targets_)
-            category_code = torch.stack(category_code, dim=0)   # (num_enc_layer, args.total_num_support, d)
-            category_codes_final.append(category_code)
-            support_class_ids_final.append(support_class_ids_)
-        support_class_ids_final = torch.cat(support_class_ids_final, dim=0)
-        category_codes_final = torch.cat(category_codes_final, dim=1)  # (num_enc_layer, num_episode x args.total_num_support, d)
-        all_category_codes_final.append(category_codes_final)
-
-    if args.num_feature_levels == 1:
-        all_category_codes_final = torch.stack(all_category_codes_final, dim=0)  # (number_of_supports, num_enc_layer, num_episode x args.total_num_support, d)
-        all_category_codes_final = torch.mean(all_category_codes_final, 0, keepdims=False)
-        all_category_codes_final = list(torch.unbind(all_category_codes_final, dim=0))
-    elif args.num_feature_levels == 4:
-        raise NotImplementedError
-    else:
-        raise NotImplementedError
-    print("Completed extracting category codes. Start Inference...")
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('class_error', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Test:'
 
-    iou_types = tuple(k for k in ('bbox',) if k in postprocessors.keys())
-    evaluator = DetectionEvaluator(base_ds, iou_types)
-    if type == 'all':
-        pass  # To evaluate all categories, no need to change params of the evaluator
-    elif type == 'base':
-        if args.dataset_file == 'coco_base':
-            evaluator.coco_eval['bbox'].params.catIds = coco_base_class_ids
-        elif args.dataset_file == 'voc_base1':
-            evaluator.coco_eval['bbox'].params.catIds = voc_base1_class_ids
-        elif args.dataset_file == 'voc_base2':
-            evaluator.coco_eval['bbox'].params.catIds = voc_base2_class_ids
-        elif args.dataset_file == 'voc_base3':
-            evaluator.coco_eval['bbox'].params.catIds = voc_base3_class_ids
-        else:
-            raise ValueError
-    elif type == 'novel':
-        if args.dataset_file == 'coco_base' or args.dataset_file == 'coco':
-            evaluator.coco_eval['bbox'].params.catIds = coco_novel_class_ids
-        elif args.dataset_file == 'voc_base1':
-            evaluator.coco_eval['bbox'].params.catIds = voc_novel1_class_ids
-        elif args.dataset_file == 'voc_base2':
-            evaluator.coco_eval['bbox'].params.catIds = voc_novel2_class_ids
-        elif args.dataset_file == 'voc_base3':
-            evaluator.coco_eval['bbox'].params.catIds = voc_novel3_class_ids
-        else:
-            raise ValueError
-    else:
-        raise ValueError("Type must be 'all', 'base' or 'novel'!")
+    iou_types = tuple(k for k in ('segm', 'bbox') if k in postprocessors.keys())
+    coco_evaluator = DetectionEvaluator(base_ds, iou_types)
+    # coco_evaluator.coco_eval[iou_types[0]].params.iouThrs = [0, 0.1, 0.5, 0.75]
 
-    print_freq = 50
+    panoptic_evaluator = None
+    if 'panoptic' in postprocessors.keys():
+        panoptic_evaluator = PanopticEvaluator(
+            data_loader.dataset.ann_file,
+            data_loader.dataset.ann_folder,
+            output_dir=os.path.join(output_dir, "panoptic_eval"),
+        )
 
-    for samples, targets in metric_logger.log_every(dataloader, print_freq, header):
-
+    for samples, targets in metric_logger.log_every(data_loader, 10, header):
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-        outputs = model(samples, targets=targets, supp_class_ids=support_class_ids_final, category_codes=all_category_codes_final)
-        loss_dict = criterion(outputs)
+        outputs = model(samples)
+        loss_dict = criterion(outputs, targets)
         weight_dict = criterion.weight_dict
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = utils.reduce_dict(loss_dict)
-        loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
-        loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
+        loss_dict_reduced_scaled = {k: v * weight_dict[k]
+                                    for k, v in loss_dict_reduced.items() if k in weight_dict}
+        loss_dict_reduced_unscaled = {f'{k}_unscaled': v
+                                      for k, v in loss_dict_reduced.items()}
         metric_logger.update(loss=sum(loss_dict_reduced_scaled.values()),
                              **loss_dict_reduced_scaled,
                              **loss_dict_reduced_unscaled)
@@ -338,51 +182,46 @@ def evaluate(args, model, criterion, postprocessors, dataloader, support_data_lo
 
         orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
         results = postprocessors['bbox'](outputs, orig_target_sizes)
+        if 'segm' in postprocessors.keys():
+            target_sizes = torch.stack([t["size"] for t in targets], dim=0)
+            results = postprocessors['segm'](results, outputs, orig_target_sizes, target_sizes)
         res = {target['image_id'].item(): output for target, output in zip(targets, results)}
-        if evaluator is not None:
-            evaluator.update(res)
+        if coco_evaluator is not None:
+            coco_evaluator.update(res)
+
+        if panoptic_evaluator is not None:
+            res_pano = postprocessors["panoptic"](outputs, target_sizes, orig_target_sizes)
+            for i, target in enumerate(targets):
+                image_id = target["image_id"].item()
+                file_name = f"{image_id:012d}.png"
+                res_pano[i]["image_id"] = image_id
+                res_pano[i]["file_name"] = file_name
+
+            panoptic_evaluator.update(res_pano)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    if evaluator is not None:
-        evaluator.synchronize_between_processes()
+    if coco_evaluator is not None:
+        coco_evaluator.synchronize_between_processes()
+    if panoptic_evaluator is not None:
+        panoptic_evaluator.synchronize_between_processes()
 
     # accumulate predictions from all images
-    if evaluator is not None:
-        if type == 'all':
-            print("\n\n\n\n * ALL Categories:")
-        elif type == 'base':
-            print("\n\n\n\n * Base Categories:")
-        elif type == 'novel':
-            print("\n\n\n\n * Novel Categories:")
-        else:
-            raise ValueError("Type must be 'all', 'base' or 'novel'!")
-        evaluator.accumulate()
-        evaluator.summarize()
+    if coco_evaluator is not None:
+        coco_evaluator.accumulate()
+        coco_evaluator.summarize()
+    panoptic_res = None
+    if panoptic_evaluator is not None:
+        panoptic_res = panoptic_evaluator.summarize()
     stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-    if evaluator is not None:
+    if coco_evaluator is not None:
         if 'bbox' in postprocessors.keys():
-            stats['coco_eval_bbox'] = evaluator.coco_eval['bbox'].stats.tolist()
-
-    del support_images
-    del support_class_ids
-    del support_targets
-    del samples
-    del targets
-    del outputs
-    del weight_dict
-    del loss_dict
-    del loss_dict_reduced
-    del loss_dict_reduced_scaled
-    del loss_dict_reduced_unscaled
-    del category_code
-    del category_codes_final
-    del all_category_codes_final
-    del orig_target_sizes
-    del res
-    del results
-    torch.cuda.empty_cache()
-
-    return stats, evaluator
-
+            stats['coco_eval_bbox'] = coco_evaluator.coco_eval['bbox'].stats.tolist()
+        if 'segm' in postprocessors.keys():
+            stats['coco_eval_masks'] = coco_evaluator.coco_eval['segm'].stats.tolist()
+    if panoptic_res is not None:
+        stats['PQ_all'] = panoptic_res["All"]
+        stats['PQ_th'] = panoptic_res["Things"]
+        stats['PQ_st'] = panoptic_res["Stuff"]
+    return stats, coco_evaluator

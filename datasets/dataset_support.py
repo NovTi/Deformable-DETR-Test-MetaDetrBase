@@ -299,7 +299,7 @@ def build_support_dataset(image_set, args):
     else:
         # After Fewshot Fine-tuning, we use the support dataset that was used for few-shot fine-tuning as the support
         # dataset for inference (to generate category codes).
-        assert image_set == "fewshot"
+        assert image_set == "finetune"
 
         if args.dataset_file == 'coco_base':
             root = Path('data/coco_fewshot')

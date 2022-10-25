@@ -161,23 +161,9 @@ def main(args):
     image_set = 'finetune' if args.is_finetune else 'train'
     dataset_train = build_dataset(image_set=image_set, args=args)
     dataset_val = build_dataset(image_set='val', args=args)
-    # dataset_support = build_support_dataset(image_set=image_set, args=args)
 
-    a = dataset_train[0]
-
-    if args.distributed:
-        if args.cache_mode:
-            sampler_train = samplers.NodeDistributedSampler(dataset_train)
-            sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
-            # sampler_support = samplers.NodeDistributedSampler(dataset_support)
-        else:
-            sampler_train = samplers.DistributedSampler(dataset_train)
-            sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
-            # sampler_support = samplers.DistributedSampler(dataset_support)
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-        # sampler_support = torch.utils.data.RandomSampler(dataset_support)
+    sampler_train = torch.utils.data.RandomSampler(dataset_train)
+    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=False)
 
@@ -195,13 +181,6 @@ def main(args):
                             num_workers=args.num_workers,
                             pin_memory=True)
 
-    # loader_support = DataLoader(dataset_support,
-                                # batch_size=1,
-                                # sampler=sampler_support,
-                                # drop_last=False,
-                                # num_workers=args.num_workers,
-                                # pin_memory=False)
-
     def match_name_keywords(n, name_keywords):
         out = False
         for b in name_keywords:
@@ -212,8 +191,33 @@ def main(args):
 
     for n, p in model_without_ddp.named_parameters():
         print(n)
-    # pdb.set_trace()
-    if not args.fewshot_finetune:
+
+    pdb.set_trace()
+
+    if args.is_finetune:
+        # load weight
+        # change to the cosine classifer
+        pass
+
+    if args.is_finetune:
+        # For few-shot finetune stage, do not train sampling offsets, reference points, and embedding related parameters
+        param_dicts = [
+            {
+                "params":
+                    [p for n, p in model_without_ddp.named_parameters()
+                     if not match_name_keywords(n, args.lr_backbone_names) and \
+                        not match_name_keywords(n, args.lr_linear_proj_names) and \
+                        not match_name_keywords(n, args.embedding_related_names) and p.requires_grad],
+                "lr": args.lr,
+                "initial_lr": args.lr,
+            },
+            {
+                "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
+                "lr": args.lr_backbone,
+                "initial_lr": args.lr_backbone,
+            },
+        ]  
+    else:
         param_dicts = [
             {
                 "params":
@@ -233,24 +237,6 @@ def main(args):
                 "initial_lr": args.lr * args.lr_linear_proj_mult,
             }
         ]
-    else:
-        # For few-shot finetune stage, do not train sampling offsets, reference points, and embedding related parameters
-        param_dicts = [
-            {
-                "params":
-                    [p for n, p in model_without_ddp.named_parameters()
-                     if not match_name_keywords(n, args.lr_backbone_names) and \
-                        not match_name_keywords(n, args.lr_linear_proj_names) and \
-                        not match_name_keywords(n, args.embedding_related_names) and p.requires_grad],
-                "lr": args.lr,
-                "initial_lr": args.lr,
-            },
-            {
-                "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
-                "lr": args.lr_backbone,
-                "initial_lr": args.lr_backbone,
-            },
-        ]
 
     optimizer = torch.optim.AdamW(param_dicts, weight_decay=args.weight_decay)
     lr_scheduler = WarmupMultiStepLR(optimizer,
@@ -265,12 +251,7 @@ def main(args):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
-    if args.dataset_file == "coco_panoptic":
-        # We also evaluate AP during panoptic training, on original coco DS
-        coco_val = datasets.dataset.build("val", args)
-        base_ds = get_coco_api_from_dataset(coco_val)
-    else:
-        base_ds = get_coco_api_from_dataset(dataset_val)
+    base_ds = get_coco_api_from_dataset(dataset_val)
 
     output_dir = Path(args.output_dir)
     if args.resume:
@@ -285,37 +266,6 @@ def main(args):
         if len(unexpected_keys) > 0:
             print('Unexpected Keys: {}'.format(unexpected_keys))
 
-        if args.fewshot_finetune:
-            if args.category_codes_cls_loss:
-                # Re-init weights of novel categories for few-shot finetune
-                novel_class_ids = datasets.get_class_ids(args.dataset_file, type='novel')
-                if args.num_feature_levels == 1:
-                    for novel_class_id in novel_class_ids:
-                        nn.init.normal_(model_without_ddp.category_codes_cls.L.weight[novel_class_id])
-                elif args.num_feature_levels > 1:
-                    for classifier in model_without_ddp.category_codes_cls:
-                        for novel_class_id in novel_class_ids:
-                            nn.init.normal_(classifier.L.weight[novel_class_id])
-                else:
-                    raise RuntimeError
-
-    if args.eval:
-        # Evaluate only base categories
-        test_stats, coco_evaluator = evaluate(
-            args, model, criterion, postprocessors, loader_val, loader_support, base_ds, device, type='base'
-        )
-        if args.output_dir:
-            utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval_base.pth")
-
-        # Evaluate only novel categories
-        test_stats, coco_evaluator = evaluate(
-            args, model, criterion, postprocessors, loader_val, loader_support, base_ds, device, type='novel'
-        )
-        if args.output_dir:
-            utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval_novel.pth")
-
-        return
-
     print("Start training...")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
@@ -327,7 +277,7 @@ def main(args):
         lr_scheduler.step()
 
         # Saving Checkpoints after each epoch
-        if args.output_dir and (not args.fewshot_finetune):
+        if args.output_dir and (not args.is_finetune):
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
@@ -353,35 +303,26 @@ def main(args):
                 }, checkpoint_path)
 
         # Evaluation and Logging
-        if (epoch + 1) % args.eval_every_epoch == 0:
-            if 'base' in args.dataset_file:
-                evaltype = 'base'
-            else:
-                evaltype = 'all'
-            if args.fewshot_finetune:
-                evaltype = 'novel'
+        test_stats, coco_evaluator = evaluate(
+            model, criterion, postprocessors, loader_val, base_ds, device, args.output_dir
+        )
 
-            test_stats, coco_evaluator = evaluate(
-                args, model, criterion, postprocessors, loader_val, loader_support, base_ds, device, type=evaltype
-            )
+        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                        **{f'test_{k}': v for k, v in test_stats.items()},
+                        'epoch': epoch,
+                        'n_parameters': n_parameters}
 
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         **{f'test_{k}': v for k, v in test_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters,
-                         'evaltype': evaltype}
-
-            if args.output_dir and utils.is_main_process():
-                with (output_dir / "results.txt").open("a") as f:
-                    f.write(json.dumps(log_stats) + "\n")
-                # for evaluation logs
-                if coco_evaluator is not None:
-                    (output_dir / 'eval').mkdir(exist_ok=True)
-                    if "bbox" in coco_evaluator.coco_eval:
-                        filenames = ['latest.pth']
-                        filenames.append(f'{epoch:03}.pth')
-                        for name in filenames:
-                            torch.save(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval" / name)
+        if args.output_dir and utils.is_main_process():
+            with (output_dir / "results.txt").open("a") as f:
+                f.write(json.dumps(log_stats) + "\n")
+            # for evaluation logs
+            if coco_evaluator is not None:
+                (output_dir / 'eval').mkdir(exist_ok=True)
+                if "bbox" in coco_evaluator.coco_eval:
+                    filenames = ['latest.pth']
+                    filenames.append(f'{epoch:03}.pth')
+                    for name in filenames:
+                        torch.save(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval" / name)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

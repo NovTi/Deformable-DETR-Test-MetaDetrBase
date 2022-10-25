@@ -6,6 +6,7 @@ from PIL import Image
 import os
 import os.path
 from io import BytesIO
+import pdb
 
 
 class CocoDetection(VisionDataset):
