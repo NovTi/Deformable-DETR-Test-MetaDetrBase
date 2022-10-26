@@ -1,8 +1,8 @@
 BASETRAIN:     # Basic Training and Inference Setting
-  lr: 0.0002
+  lr: 0.0001
   lr_backbone: 2e-05
   lr_backbone_names: ['backbone.0']
-  lr_drop_milestones: [20]
+  lr_drop: 20
   lr_linear_proj_mult: 0.1
   lr_linear_proj_names: ['reference_points', 'sampling_offsets']
   batch_size: 4
@@ -12,7 +12,7 @@ BASETRAIN:     # Basic Training and Inference Setting
   warmup_epochs: 0
   warmup_factor: 0.1
   clip_max_norm: 0.1
-  resume: ''
+  resume: './exps/voc_1/base_train/checkpoint0024.pth'
   start_epoch: 0
   eval: False
   eval_every_epoch: 5
@@ -22,6 +22,7 @@ FINETUNE:   # Few-shot Learning Setting
   is_finetune: True
   fewshot_seed: 1
   num_shots: 10
+  finetune_module_name: ['class_embed.0', 'bbox_embed.0']
 
 META:           # Meta-Task Construction Settings
   episode_num: 5

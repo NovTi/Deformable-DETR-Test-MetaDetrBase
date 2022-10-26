@@ -25,103 +25,6 @@ from util.load_cfg import load_cfg_from_cfg_file, merge_cfg_from_list
 torch.backends.cudnn.benchmark = False
 
 
-def get_args_parser():
-    parser = argparse.ArgumentParser('Meta-DETR', add_help=False)
-
-    # Basic Training and Inference Setting
-    parser.add_argument('--lr', default=2e-4, type=float)
-    parser.add_argument('--lr_backbone_names', default=["backbone.0"], type=str, nargs='+')
-    parser.add_argument('--lr_backbone', default=2e-5, type=float)
-    parser.add_argument('--lr_linear_proj_names', default=['reference_points', 'sampling_offsets'], type=str, nargs='+')
-    parser.add_argument('--lr_linear_proj_mult', default=0.1, type=float)
-    parser.add_argument('--embedding_related_names', default=['level_embed', 'query_embed'], type=str, nargs='+')
-    parser.add_argument('--batch_size', default=2, type=int)
-    parser.add_argument('--weight_decay', default=1e-4, type=float)
-    parser.add_argument('--epochs', default=50, type=int)
-    parser.add_argument('--lr_drop_milestones', default=[45], type=int, nargs='+')
-    parser.add_argument('--warmup_epochs', default=0, type=int)
-    parser.add_argument('--warmup_factor', default=0.1, type=float)
-    parser.add_argument('--clip_max_norm', default=0.1, type=float, help='gradient clipping max norm')
-    parser.add_argument('--resume', default='', help='resume from checkpoint, empty for training from scratch')
-    parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='start epoch')
-    parser.add_argument('--eval', action='store_true', help='only perform inference and evaluation')
-    parser.add_argument('--eval_every_epoch', default=10, type=int, help='eval every ? epoch')
-    parser.add_argument('--save_every_epoch', default=10, type=int, help='save model weights every ? epoch')
-
-    # Few-shot Learning Setting
-    parser.add_argument('--is_finetune', default=False, action='store_true')
-    parser.add_argument('--fewshot_seed', default=1, type=int)
-    parser.add_argument('--num_shots', default=10, type=int)
-
-    # Meta-Task Construction Settings
-    parser.add_argument('--episode_num', default=5, type=int, help='The number of episode(s) for each iteration')
-    parser.add_argument('--episode_size', default=5, type=int, help='The episode size')
-    parser.add_argument('--total_num_support', default=15, type=int, help='used in training: each query image comes with ? support image(s)')
-    parser.add_argument('--max_pos_support', default=10, type=int, help='used in training: each query image comes with at most ? positive support image(s)')
-
-    # Model parameters
-    # * Model Variant
-    parser.add_argument('--with_box_refine', default=False, action='store_true')
-    parser.add_argument('--two_stage', default=False, action='store_true')
-
-    # * Backbone
-    parser.add_argument('--backbone', default='resnet101', type=str, help="Name of the ResNet backbone")
-    parser.add_argument('--dilation', action='store_true', help="If true, ResNet backbone DC5 mode enabled")
-    parser.add_argument('--freeze_backbone_at_layer', default=2, type=int, help='including the provided layer')
-    parser.add_argument('--num_feature_levels', default=1, type=int, help='number of feature levels, 1 or 4')
-    parser.add_argument('--position_embedding', default='sine', type=str, choices=('sine', 'learned'))
-    parser.add_argument('--position_embedding_scale', default=2 * np.pi, type=float, help="position / size * scale")
-
-    # * Transformer
-    parser.add_argument('--enc_layers', default=6, type=int, help="Number of encoding layers in transformer")
-    parser.add_argument('--dec_layers', default=6, type=int, help="Number of decoding layers in transformer")
-    parser.add_argument('--dim_feedforward', default=1024, type=int, help="Intermediate dim of the FC in transformer")
-    parser.add_argument('--hidden_dim', default=256, type=int, help="dimension of transformer")
-    parser.add_argument('--dropout', default=0.1, type=float, help="Dropout applied in transformer")
-    parser.add_argument('--nheads', default=8, type=int, help="Number of attention heads for transformer")
-    parser.add_argument('--num_queries', default=300, type=int, help="Number of query slots")
-    parser.add_argument('--enc_n_points', default=4, type=int)
-    parser.add_argument('--dec_n_points', default=4, type=int)
-
-    # * Segmentation
-    parser.add_argument('--masks', default=False, action='store_true',
-                        help="Train segmentation head if the flag is provided")
-
-    # Loss
-    parser.add_argument('--no_aux_loss', dest='aux_loss', action='store_false', help="no aux loss @ each decoder layer")
-    parser.add_argument('--category_codes_cls_loss', action='store_true', help="if set, enable category codes cls loss")
-
-    # * Matcher
-    parser.add_argument('--set_cost_class', default=2.0, type=float, help="Class coefficient in the matching cost")
-    parser.add_argument('--set_cost_bbox', default=5.0, type=float, help="L1 box coefficient in the matching cost")
-    parser.add_argument('--set_cost_giou', default=2.0, type=float, help="GIoU box coefficient in the matching cost")
-
-    # * Loss coefficients
-    parser.add_argument('--mask_loss_coef', default=1.0, type=float)
-    parser.add_argument('--dice_loss_coef', default=1.0, type=float)
-    parser.add_argument('--cls_loss_coef', default=2.0, type=float)
-    parser.add_argument('--bbox_loss_coef', default=5.0, type=float)
-    parser.add_argument('--giou_loss_coef', default=2.0, type=float)
-    parser.add_argument('--category_codes_cls_loss_coef', default=5.0, type=float)
-    parser.add_argument('--focal_alpha', default=0.25, type=float)
-
-    # dataset parameters
-    parser.add_argument('--dataset_file', default='voc_base1')
-    parser.add_argument('--remove_difficult', action='store_true')
-    parser.add_argument('--data_root', default='../dataset/VOC_detr')
-
-
-    # Misc
-    parser.add_argument('--output_dir', default='', help='path to where to save, empty for no saving')
-    parser.add_argument('--device', default='cuda', help='device to use for training / testing, only cuda supported')
-    parser.add_argument('--seed', default=6666, type=int)
-    parser.add_argument('--num_workers', default=2, type=int)
-    parser.add_argument('--cache_mode', default=False, action='store_true', help='whether to cache images on memory')
-
-    parser.add_argument('--distributed', default=False, action='store_true', help='for the args.distributed')
-
-    return parser
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Testing Deformable DETR Idea')
     parser.add_argument('--config', type=str, required=True, help='config file')
@@ -192,7 +95,7 @@ def main(args):
     for n, p in model_without_ddp.named_parameters():
         print(n)
 
-    pdb.set_trace()
+    # pdb.set_trace()
 
     if args.is_finetune:
         # load weight
@@ -200,22 +103,20 @@ def main(args):
         pass
 
     if args.is_finetune:
-        # For few-shot finetune stage, do not train sampling offsets, reference points, and embedding related parameters
+        # For few-shot finetune stage, just train the class_embed and bbox_embed modules
         param_dicts = [
             {
                 "params":
                     [p for n, p in model_without_ddp.named_parameters()
-                     if not match_name_keywords(n, args.lr_backbone_names) and \
-                        not match_name_keywords(n, args.lr_linear_proj_names) and \
-                        not match_name_keywords(n, args.embedding_related_names) and p.requires_grad],
+                     if match_name_keywords(n, args.finetune_module_name) and p.requires_grad],
                 "lr": args.lr,
                 "initial_lr": args.lr,
             },
-            {
-                "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
-                "lr": args.lr_backbone,
-                "initial_lr": args.lr_backbone,
-            },
+            # {
+            #     "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
+            #     "lr": args.lr_backbone,
+            #     "initial_lr": args.lr_backbone,
+            # },
         ]  
     else:
         param_dicts = [
@@ -226,11 +127,12 @@ def main(args):
                 "lr": args.lr,
                 "initial_lr": args.lr,
             },
-            {
-                "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
-                "lr": args.lr_backbone,
-                "initial_lr": args.lr_backbone,
-            },
+            # also train backbone?
+            # {
+            #     "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
+            #     "lr": args.lr_backbone,
+            #     "initial_lr": args.lr_backbone,
+            # },
             {
                 "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
                 "lr": args.lr * args.lr_linear_proj_mult,
@@ -239,13 +141,16 @@ def main(args):
         ]
 
     optimizer = torch.optim.AdamW(param_dicts, weight_decay=args.weight_decay)
-    lr_scheduler = WarmupMultiStepLR(optimizer,
-                                     args.lr_drop_milestones,
-                                     gamma=0.1,
-                                     warmup_epochs=args.warmup_epochs,
-                                     warmup_factor=args.warmup_factor,
-                                     warmup_method='linear',
-                                     last_epoch=args.start_epoch - 1)
+    # change to the original Deformable-DETR scheduler
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)  
+
+    # lr_scheduler = WarmupMultiStepLR(optimizer,
+    #                                  args.lr_drop_milestones,
+    #                                  gamma=0.1,
+    #                                  warmup_epochs=args.warmup_epochs,
+    #                                  warmup_factor=args.warmup_factor,
+    #                                  warmup_method='linear',
+    #                                  last_epoch=args.start_epoch - 1)
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
@@ -254,17 +159,18 @@ def main(args):
     base_ds = get_coco_api_from_dataset(dataset_val)
 
     output_dir = Path(args.output_dir)
-    if args.resume:
+    if args.resume:  # load weight for finetune on novel set
         if args.resume.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        missing_keys, unexpected_keys = model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
-        unexpected_keys = [k for k in unexpected_keys if not (k.endswith('total_params') or k.endswith('total_ops'))]
-        if len(missing_keys) > 0:
-            print('Missing Keys: {}'.format(missing_keys))
-        if len(unexpected_keys) > 0:
-            print('Unexpected Keys: {}'.format(unexpected_keys))
+        model_dict = model_without_ddp.state_dict()
+        for index, key in enumerate(model_dict.keys()):
+            if 'class_embed.0' not in key:
+                if model_dict[key].shape == checkpoint['model'][key].shape:
+                    model_dict[key] = checkpoint['model'][key]
+                else:
+                    print(f"Weight Does Not Match for \'{key}\'!")
 
     print("Start training...")
     start_time = time.time()

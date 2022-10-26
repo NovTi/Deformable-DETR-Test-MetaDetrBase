@@ -8,7 +8,7 @@ BASETRAIN:     # Basic Training and Inference Setting
   batch_size: 4
   embedding_related_names: ['level_embed', 'query_embed']
   weight_decay: 0.0001
-  epochs: 50
+  epochs: 25
   warmup_epochs: 0
   warmup_factor: 0.1
   clip_max_norm: 0.1
@@ -22,6 +22,7 @@ FINETUNE:   # Few-shot Learning Setting
   is_finetune: False
   fewshot_seed: 1
   num_shots: 10
+  finetune_module_name: None
 
 META:           # Meta-Task Construction Settings
   episode_num: 5
@@ -81,7 +82,7 @@ DATASET:         # dataset parameters
   data_root: '../dataset/VOC_detr'
 
 MISC:             # Misc
-  output_dir: 'exps/voc_1/base_train_epoch50'
+  output_dir: 'exps/voc_1/test'
   device: 'cuda'
   cache_mode: False
   distributed: False
